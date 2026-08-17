@@ -31,7 +31,15 @@ const LESSONS = [
   { id:'three-free-throws', label:'Three free throws', focus:'/θ/ versus /f/', sentence:'Three free throws.', ipa:'θɹi fɹi θɹoʊz', tip:'Use the tongue for /θ/ and the lower lip for /f/; do not merge the two.', tokens:['θ','ɹ','i','f','ɹ','i','θ','ɹ','oʊ','z'] },
   { id:'fresh-fried-fish', label:'Fresh fried fish', focus:'FR clusters and vowels', sentence:'Fresh fried fish, fish fresh fried.', ipa:'fɹɛʃ fɹaɪd fɪʃ fɪʃ fɹɛʃ fɹaɪd', tip:'Preserve the /fɹ/ cluster and clearly contrast /ɛ/, /aɪ/, and /ɪ/.', tokens:['f','ɹ','ɛ','ʃ','f','ɹ','aɪ','d','f','ɪ','ʃ','f','ɪ','ʃ','f','ɹ','ɛ','ʃ','f','ɹ','aɪ','d'] }
 ];
-const AI_VOICE='azelma';
+const TTS_VOICES={
+  pocket:[{id:'azelma',name:'Azelma'}],
+  kokoro:[
+    {id:'af_heart',name:'Heart · US female'},{id:'af_bella',name:'Bella · US female'},{id:'af_nicole',name:'Nicole · US female'},{id:'af_sarah',name:'Sarah · US female'},{id:'af_sky',name:'Sky · US female'},{id:'af_alloy',name:'Alloy · US female'},{id:'af_aoede',name:'Aoede · US female'},{id:'af_jessica',name:'Jessica · US female'},{id:'af_kore',name:'Kore · US female'},{id:'af_nova',name:'Nova · US female'},{id:'af_river',name:'River · US female'},
+    {id:'am_adam',name:'Adam · US male'},{id:'am_echo',name:'Echo · US male'},{id:'am_eric',name:'Eric · US male'},{id:'am_fenrir',name:'Fenrir · US male'},{id:'am_liam',name:'Liam · US male'},{id:'am_michael',name:'Michael · US male'},{id:'am_onyx',name:'Onyx · US male'},{id:'am_puck',name:'Puck · US male'},{id:'am_santa',name:'Santa · US male'},
+    {id:'bf_emma',name:'Emma · UK female'},{id:'bf_isabella',name:'Isabella · UK female'},{id:'bf_alice',name:'Alice · UK female'},{id:'bf_lily',name:'Lily · UK female'},{id:'bm_george',name:'George · UK male'},{id:'bm_lewis',name:'Lewis · UK male'},{id:'bm_daniel',name:'Daniel · UK male'},{id:'bm_fable',name:'Fable · UK male'}
+  ]
+};
+let selectedEngine='pocket',selectedVoice='azelma';
 const BEGINNER_LESSONS=new Set(['quick-brown-fox','w-and-v','long-short-i','word-endings','short-a-e','oo-vowels','s-and-z','sh-and-ch','questions','voicing','three-free-throws']);
 const ADVANCED_LESSONS=new Set(['consonant-clusters','schwa','linking','reductions','flap-t','r-vowels','sentence-stress','thirty-three','peter-piper','fresh-fried-fish']);
 const difficultyFor=lesson=>BEGINNER_LESSONS.has(lesson.id)?'Beginner':ADVANCED_LESSONS.has(lesson.id)?'Advanced':'Intermediate';
@@ -56,7 +64,7 @@ app.innerHTML = `
       <div class="game-controls">
         <div class="game-player">
           <div id="aiGrade" class="game-score"><b>—</b><small>AI VOICE</small></div>
-          <button id="playReference" class="game-button ai-button" aria-label="Play and grade Azelma's pronunciation"><i></i><span>GRADE AI</span></button>
+          <div class="ai-tts-controls"><div class="tts-pickers"><select id="enginePicker" aria-label="AI speech engine"><option value="pocket">PocketTTS</option><option value="kokoro">Kokoro</option></select><select id="voicePicker" aria-label="AI voice"></select></div><button id="playReference" class="game-button ai-button" aria-label="Generate and grade AI pronunciation"><i></i><span>GRADE AI</span></button></div>
         </div>
         <div class="versus"><span>VS</span></div>
         <div class="game-player">
@@ -72,12 +80,18 @@ app.innerHTML = `
   </main>`;
 
 let recorder, chunks = [], audioCtx, analyser, raf, referenceUrl, referenceBlob;
-let ttsWorker, phonemeWorker, phonemizeWorker;
+let ttsWorker, kokoroWorker, phonemeWorker, phonemizeWorker;
 const recognitionJobs=new Map();
 const recordBtn = document.querySelector('#record');
 const statusEl = document.querySelector('#status');
 
 document.querySelector('#playReference').addEventListener('click', playReference);
+const enginePicker=document.querySelector('#enginePicker'),voicePicker=document.querySelector('#voicePicker');
+function renderVoicePicker(){voicePicker.innerHTML=TTS_VOICES[selectedEngine].map(voice=>`<option value="${voice.id}">${voice.name}</option>`).join('');selectedVoice=TTS_VOICES[selectedEngine][0].id}
+function clearReference(){if(referenceUrl)URL.revokeObjectURL(referenceUrl);referenceUrl=null;referenceBlob=null;document.querySelector('#aiGrade').innerHTML='<b>—</b><small>AI VOICE</small>';renderSentence();document.querySelector('#textLegend').classList.add('hidden')}
+renderVoicePicker();
+enginePicker.addEventListener('change',event=>{selectedEngine=event.target.value;renderVoicePicker();clearReference();statusEl.textContent=`${event.target.selectedOptions[0].text} ready.`});
+voicePicker.addEventListener('change',event=>{selectedVoice=event.target.value;clearReference();statusEl.textContent='AI voice changed. Ready to grade.'});
 const sampleToggle=document.querySelector('#sampleToggle');
 const sampleMenu=document.querySelector('#sampleMenu');
 sampleToggle.addEventListener('click',()=>{
@@ -207,27 +221,30 @@ async function playWithWave(url){
 function playReference(){
   const button=document.querySelector('#playReference');
   const lesson=currentLesson;
-  const voice=AI_VOICE;
+  const engine=selectedEngine,voice=selectedVoice;
   renderSentence();document.querySelector('#textLegend').classList.add('hidden');
   clearGrade('#aiGrade');
-  if(referenceUrl){setButtonBusy(button,'GRADING…');playWithWave(referenceUrl);gradeReference(referenceBlob,lesson,voice);return}
+  enginePicker.disabled=true;voicePicker.disabled=true;
+  if(referenceUrl){setButtonBusy(button,'GRADING…');playWithWave(referenceUrl);gradeReference(referenceBlob,lesson,engine,voice);return}
   setButtonBusy(button,'GENERATING…');
-  statusEl.innerHTML='<span class="spinner"></span> Loading the reference voice…';
-  ttsWorker ||= new Worker(new URL(`${import.meta.env.BASE_URL}pocket-tts-worker.js`,location.href),{type:'module'});
+  statusEl.innerHTML=`<span class="spinner"></span> Loading ${engine==='kokoro'?'Kokoro':'PocketTTS'}…`;
+  const worker=engine==='kokoro'
+    ?(kokoroWorker ||= new Worker(new URL('./kokoro-worker.js',import.meta.url),{type:'module'}))
+    :(ttsWorker ||= new Worker(new URL(`${import.meta.env.BASE_URL}pocket-tts-worker.js`,location.href),{type:'module'}));
   const requestId=crypto.randomUUID();
   const onMessage=event=>{
     const data=event.data||{};
-    if(data.status==='progress'){statusEl.textContent=data.message;return}
     if(data.requestId!==requestId)return;
+    if(data.status==='progress'){statusEl.textContent=data.message;return}
     if(data.status==='complete'){
       referenceBlob=data.audio;referenceUrl=URL.createObjectURL(data.audio);playWithWave(referenceUrl);
       statusEl.textContent='Reference pronunciation ready. Grading the AI voice…';button.querySelector('span').textContent='GRADING…';cleanup();
-      gradeReference(data.audio,lesson,voice);
-    }else if(data.status==='error'){document.querySelector('#aiGrade').innerHTML='<b>—</b><small>TRY AGAIN</small>';statusEl.textContent=`Reference voice failed: ${data.error}`;cleanup();resetButton(button,'GRADE AI')}
+      gradeReference(data.audio,lesson,engine,voice);
+    }else if(data.status==='error'){document.querySelector('#aiGrade').innerHTML='<b>—</b><small>TRY AGAIN</small>';statusEl.textContent=`Reference voice failed: ${data.error}`;cleanup();enginePicker.disabled=false;voicePicker.disabled=false;resetButton(button,'GRADE AI')}
   };
-  const cleanup=()=>ttsWorker.removeEventListener('message',onMessage);
-  ttsWorker.addEventListener('message',onMessage);
-  ttsWorker.postMessage({command:'tts',text:currentLesson.sentence,voice,quant:'q8',stream:false,reason:'preview',requestId});
+  const cleanup=()=>worker.removeEventListener('message',onMessage);
+  worker.addEventListener('message',onMessage);
+  worker.postMessage(engine==='kokoro'?{command:'tts',text:lesson.sentence,voice,requestId}:{command:'tts',text:lesson.sentence,voice,quant:'q8',stream:false,reason:'preview',requestId});
 }
 
 async function recognize(blob){
@@ -246,7 +263,7 @@ async function recognize(blob){
   });
 }
 
-async function gradeReference(blob,lesson,voice){
+async function gradeReference(blob,lesson,engine,voice){
   try{
     document.querySelector('#wave').classList.add('grading');
     const result=await recognize(blob);
@@ -255,10 +272,10 @@ async function gradeReference(blob,lesson,voice){
     renderSentence(scoreWords(lesson.ipa,align(lesson.tokens,result.decoded.tokens)));
     document.querySelector('#textLegend').classList.remove('hidden');
     const badge=document.querySelector('#aiGrade');
-    badge.innerHTML=`<b>${score}%</b><small>${voice.toUpperCase()} · ${Math.round(result.inferenceMs)} ms</small>`;
+    badge.innerHTML=`<b>${score}%</b><small>${engine==='kokoro'?'KOKORO':'POCKET'} · ${voice.toUpperCase()} · ${Math.round(result.inferenceMs)} ms</small>`;
     statusEl.textContent=`AI reference graded ${score}% by the same phoneme model.`;
   }catch(e){console.error(e);document.querySelector('#aiGrade').innerHTML='<b>—</b><small>TRY AGAIN</small>';statusEl.textContent=`AI grading failed: ${e.message}`}
-  finally{document.querySelector('#wave').classList.remove('grading');resetButton(document.querySelector('#playReference'),'GRADE AI')}
+  finally{document.querySelector('#wave').classList.remove('grading');enginePicker.disabled=false;voicePicker.disabled=false;resetButton(document.querySelector('#playReference'),'GRADE AI')}
 }
 
 async function analyze(blob){

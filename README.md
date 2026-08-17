@@ -2,11 +2,12 @@
 
 A private, browser-based pronunciation game: grade an AI voice, take your turn, and see who says the sentence better.
 
-PocketTTS generates the reference voice, then the same Wav2Vec2 phoneme model grades both the AI and the player. Recorded audio never leaves the browser.
+PocketTTS or Kokoro generates the reference voice, then the same Wav2Vec2 phoneme model grades both the AI and the player. Recorded audio never leaves the browser.
 
 ## Features
 
 - AI-versus-you pronunciation game
+- PocketTTS and Kokoro engines with selectable voices
 - 29 guided drills sorted by difficulty
 - Famous tongue twisters and targeted English sound contrasts
 - Custom challenges with shareable `?challenge=` URLs
@@ -63,6 +64,7 @@ Vite uses relative asset paths, so the same build can also run on a custom domai
 - [Transformers.js](https://huggingface.co/docs/transformers.js/)
 - [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/)
 - [PocketTTS](https://github.com/kyutai-labs/pocket-tts)
+- [Kokoro](https://github.com/hexgrad/kokoro)
 - [eSpeak NG](https://github.com/espeak-ng/espeak-ng)
 - [Wav2Vec2 phoneme model](https://huggingface.co/onnx-community/wav2vec2-lv-60-espeak-cv-ft-ONNX)
 
