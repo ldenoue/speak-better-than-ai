@@ -48,6 +48,7 @@ const CURRICULUM=[...LESSONS].sort((a,b)=>DIFFICULTY_ORDER[difficultyFor(a)]-DIF
 const initialChallenge=new URL(location.href).searchParams.get('challenge');
 const presetChallenge=LESSONS.find(lesson=>lesson.id===initialChallenge);
 let currentLesson = presetChallenge||LESSONS[0];
+let customLesson=null;
 if(!initialChallenge){const url=new URL(location.href);url.searchParams.set('challenge',currentLesson.id);history.replaceState({challenge:currentLesson.id},'',url)}
 
 const app = document.querySelector('#app');
@@ -78,7 +79,7 @@ app.innerHTML = `
       </div>
       <p class="hint" id="status">Press record, then read the line above.</p>
     </section>
-    <div id="lessonProgress" class="lesson-progress" aria-label="Guided drill progress">${CURRICULUM.map((lesson,index)=>`<button class="progress-dot" data-curriculum="${index}" aria-label="Go to ${difficultyFor(lesson).toLowerCase()} drill ${index+1}: ${lesson.label}"></button>`).join('')}</div>
+    <div id="lessonProgress" class="lesson-progress" aria-label="Challenge progress"></div>
   </main>`;
 
 let recorder, chunks = [], audioCtx, analyser, raf, referenceUrl, referenceBlob;
@@ -96,11 +97,11 @@ enginePicker.addEventListener('change',event=>{selectedEngine=event.target.value
 voicePicker.addEventListener('change',event=>{selectedVoice=event.target.value;clearReference();statusEl.textContent='AI voice changed. Ready to grade.'});
 document.querySelector('#previousLesson').addEventListener('click',()=>moveThroughCurriculum(-1));
 document.querySelector('#nextLesson').addEventListener('click',()=>moveThroughCurriculum(1));
-document.querySelectorAll('.progress-dot').forEach(dot=>dot.addEventListener('click',()=>selectLesson(CURRICULUM[Number(dot.dataset.curriculum)],{updateUrl:true})));
+document.querySelector('#lessonProgress').addEventListener('click',event=>{const dot=event.target.closest('.progress-dot');if(dot)selectLesson(lessonSequence()[Number(dot.dataset.lesson)],{updateUrl:true})});
 document.addEventListener('keydown',event=>{
   if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
   if(event.target.closest('input, select, textarea, [contenteditable="true"]')||recorder?.state==='recording')return;
-  if(CURRICULUM.indexOf(currentLesson)<0)return;
+  if(lessonSequence().indexOf(currentLesson)<0)return;
   event.preventDefault();
   moveThroughCurriculum(event.key==='ArrowLeft'?-1:1);
 });
@@ -132,31 +133,27 @@ function selectLesson(lesson,{updateUrl}){
 }
 
 function moveThroughCurriculum(direction){
-  const index=CURRICULUM.indexOf(currentLesson);
+  const sequence=lessonSequence();
+  const index=sequence.indexOf(currentLesson);
   const nextIndex=index+direction;
-  if(nextIndex>=0&&nextIndex<CURRICULUM.length)selectLesson(CURRICULUM[nextIndex],{updateUrl:true});
+  if(nextIndex>=0&&nextIndex<sequence.length)selectLesson(sequence[nextIndex],{updateUrl:true});
 }
 
+function lessonSequence(){return customLesson?[customLesson,...CURRICULUM]:CURRICULUM}
+
 function updateLessonNavigation(){
-  const index=CURRICULUM.indexOf(currentLesson);
-  const isGuided=index>=0;
-  document.querySelector('#lessonMeta').classList.toggle('hidden',!isGuided);
-  document.querySelector('#previousLesson').classList.toggle('hidden',!isGuided);
-  document.querySelector('#nextLesson').classList.toggle('hidden',!isGuided);
-  document.querySelector('#lessonProgress').classList.toggle('hidden',!isGuided);
-  if(!isGuided)return;
-  const level=difficultyFor(currentLesson);
+  const sequence=lessonSequence();
+  const index=sequence.indexOf(currentLesson);
+  if(index<0)return;
+  const isCustom=currentLesson===customLesson;
+  const level=isCustom?'Custom':difficultyFor(currentLesson);
   const difficulty=document.querySelector('#lessonDifficulty');
   difficulty.textContent=level;
   difficulty.className=`level-${level.toLowerCase()}`;
-  document.querySelector('#lessonPosition').textContent=`${index+1} of ${CURRICULUM.length}`;
+  document.querySelector('#lessonPosition').textContent=`${isCustom?0:CURRICULUM.indexOf(currentLesson)+1} of ${CURRICULUM.length}`;
   document.querySelector('#previousLesson').disabled=index===0;
-  document.querySelector('#nextLesson').disabled=index===CURRICULUM.length-1;
-  document.querySelectorAll('.progress-dot').forEach((dot,dotIndex)=>{
-    const current=dotIndex===index;
-    dot.classList.toggle('current',current);
-    current?dot.setAttribute('aria-current','step'):dot.removeAttribute('aria-current');
-  });
+  document.querySelector('#nextLesson').disabled=index===sequence.length-1;
+  document.querySelector('#lessonProgress').innerHTML=sequence.map((lesson,dotIndex)=>`<button class="progress-dot${dotIndex===index?' current':''}" data-lesson="${dotIndex}" aria-label="Go to ${lesson===customLesson?'custom challenge':`${difficultyFor(lesson).toLowerCase()} drill ${CURRICULUM.indexOf(lesson)+1}: ${lesson.label}`}"${dotIndex===index?' aria-current="step"':''}></button>`).join('');
 }
 
 window.addEventListener('popstate',()=>location.reload());
@@ -170,6 +167,7 @@ async function setCustomChallenge(text,{updateUrl}){
   try{
     const {ipa,tokens}=await phonemizeText(text);
     currentLesson={id:'custom',label:'Custom challenge',focus:'Your sentence',sentence:text,ipa,tokens,tip:'Aim for clear sounds, natural rhythm, and complete word endings.'};
+    customLesson=currentLesson;
     document.querySelectorAll('.lesson-tab').forEach(tab=>tab.classList.remove('selected'));
     renderSentence();
     updateLessonNavigation();
