@@ -65,12 +65,12 @@ app.innerHTML = `
       <div id="textLegend" class="text-legend hidden"><span><i class="legend-good"></i>Clear</span><span><i class="legend-close"></i>Close</span><span><i class="legend-practice"></i>Practice</span></div>
       <div class="game-controls">
         <div class="game-player">
-          <div id="aiGrade" class="game-score"><b>—</b><small>AI VOICE</small></div>
+          <div id="aiGrade" class="game-score"><div class="score-ring empty"><b>—</b></div><small>AI VOICE</small></div>
           <div class="ai-tts-controls"><div class="tts-pickers"><select id="enginePicker" aria-label="AI speech engine"><option value="pocket">PocketTTS</option><option value="kokoro">Kokoro</option></select><select id="voicePicker" aria-label="AI voice"></select></div><button id="playReference" class="game-button ai-button" aria-label="Generate and grade AI pronunciation"><i></i><span>GRADE AI</span></button></div>
         </div>
         <div class="versus"><span>VS</span></div>
         <div class="game-player">
-          <div id="userGrade" class="game-score"><b>—</b><small>YOUR SCORE</small></div>
+          <div id="userGrade" class="game-score"><div class="score-ring empty"><b>—</b></div><small>YOUR SCORE</small></div>
           <button id="record" class="game-button user-button"><i></i><span>MY TURN</span></button>
         </div>
       </div>
@@ -91,7 +91,7 @@ const statusEl = document.querySelector('#status');
 document.querySelector('#playReference').addEventListener('click', playReference);
 const enginePicker=document.querySelector('#enginePicker'),voicePicker=document.querySelector('#voicePicker');
 function renderVoicePicker(){voicePicker.innerHTML=TTS_VOICES[selectedEngine].map(voice=>`<option value="${voice.id}">${voice.name}</option>`).join('');selectedVoice=TTS_VOICES[selectedEngine][0].id}
-function clearReference(){if(referenceUrl)URL.revokeObjectURL(referenceUrl);referenceUrl=null;referenceBlob=null;document.querySelector('#aiGrade').innerHTML='<b>—</b><small>AI VOICE</small>';renderSentence();document.querySelector('#textLegend').classList.add('hidden')}
+function clearReference(){if(referenceUrl)URL.revokeObjectURL(referenceUrl);referenceUrl=null;referenceBlob=null;renderGradeEmpty('#aiGrade','AI VOICE');renderSentence();document.querySelector('#textLegend').classList.add('hidden')}
 renderVoicePicker();
 enginePicker.addEventListener('change',event=>{selectedEngine=event.target.value;renderVoicePicker();clearReference();statusEl.textContent=`${event.target.selectedOptions[0].text} ready.`});
 voicePicker.addEventListener('change',event=>{selectedVoice=event.target.value;clearReference();statusEl.textContent='AI voice changed. Ready to grade.'});
@@ -129,8 +129,8 @@ function selectLesson(lesson,{updateUrl}){
   if(updateUrl){const challengeUrl=new URL(location.href);challengeUrl.searchParams.set('challenge',lesson.id);history.pushState({challenge:lesson.id},'',challengeUrl)}
   if (referenceUrl) URL.revokeObjectURL(referenceUrl);
   referenceUrl = null;referenceBlob = null;
-  document.querySelector('#aiGrade').innerHTML='<b>—</b><small>AI VOICE</small>';
-  document.querySelector('#userGrade').innerHTML='<b>—</b><small>YOUR SCORE</small>';
+  renderGradeEmpty('#aiGrade','AI VOICE');
+  renderGradeEmpty('#userGrade','YOUR SCORE');
   document.querySelector('#textLegend').classList.add('hidden');
   renderSentence();
   updateLessonNavigation();
@@ -180,7 +180,7 @@ async function setCustomChallenge(text,{updateUrl}){
     renderSentence();
     updateLessonNavigation();
     if(referenceUrl)URL.revokeObjectURL(referenceUrl);referenceUrl=null;referenceBlob=null;
-    document.querySelector('#aiGrade').innerHTML='<b>—</b><small>AI VOICE</small>';document.querySelector('#userGrade').innerHTML='<b>—</b><small>YOUR SCORE</small>';document.querySelector('#textLegend').classList.add('hidden');
+    renderGradeEmpty('#aiGrade','AI VOICE');renderGradeEmpty('#userGrade','YOUR SCORE');document.querySelector('#textLegend').classList.add('hidden');
     if(updateUrl){const url=new URL(location.href);url.searchParams.set('challenge',text);history.pushState({challenge:text},'',url)}
     statusEl.textContent='Custom challenge ready.';
   }catch(error){statusEl.textContent=`Could not phonemize this challenge: ${error.message}`}
@@ -198,7 +198,13 @@ function phonemizeText(text){
   });
 }
 
-function clearGrade(selector){document.querySelector(selector).innerHTML='<b>&nbsp;</b><small>&nbsp;</small>'}
+function renderGradeEmpty(selector,label){document.querySelector(selector).innerHTML=`<div class="score-ring empty"><b>—</b></div><small>${label}</small>`}
+function renderGradeBusy(selector,label='GRADING'){document.querySelector(selector).innerHTML=`<div class="score-ring busy" role="status" aria-label="${label.toLowerCase()}"><b></b></div><small>${label}</small>`}
+function renderGrade(selector,score,label){
+  const color=score>=85?'var(--good)':score>=65?'var(--close)':'var(--accent)';
+  document.querySelector(selector).innerHTML=`<div class="score-ring" style="--score:${score};--score-color:${color}" role="img" aria-label="${score} percent"><b>${score}<span>%</span></b></div><small>${label}</small>`;
+}
+function clearGrade(selector){renderGradeBusy(selector,'LISTENING')}
 function setButtonBusy(button,label){button.disabled=true;button.classList.add('loading');button.querySelector('span').textContent=label}
 function resetButton(button,label){button.disabled=false;button.classList.remove('loading','active');button.querySelector('span').textContent=label}
 
@@ -213,6 +219,7 @@ recordBtn.addEventListener('click', async () => {
     recorder.onstop = () => {
       stream.getTracks().forEach(t => t.stop()); stopClock();
       document.querySelector('#wave').classList.add('grading');
+      renderGradeBusy('#userGrade');
       setButtonBusy(recordBtn,'GRADING…');
       const take = new Blob(chunks, {type: recorder.mimeType});
       analyze(take);
@@ -221,7 +228,7 @@ recordBtn.addEventListener('click', async () => {
     recordBtn.classList.add('active');
     statusEl.textContent = 'Listening… recording will stop when you finish speaking.';
     animateWave(stream);
-  } catch (e) { resetButton(recordBtn,'MY TURN');document.querySelector('#userGrade').innerHTML='<b>—</b><small>TRY AGAIN</small>';statusEl.textContent = `Microphone unavailable: ${e.message}`; }
+  } catch (e) { resetButton(recordBtn,'MY TURN');renderGradeEmpty('#userGrade','TRY AGAIN');statusEl.textContent = `Microphone unavailable: ${e.message}`; }
 });
 
 function stopClock(){cancelAnimationFrame(raf);recordBtn.classList.remove('active')}
@@ -261,7 +268,7 @@ function playReference(){
   const lesson=currentLesson;
   const engine=selectedEngine,voice=selectedVoice;
   renderSentence();document.querySelector('#textLegend').classList.add('hidden');
-  clearGrade('#aiGrade');
+  renderGradeBusy('#aiGrade',referenceUrl?'GRADING':'GENERATING');
   enginePicker.disabled=true;voicePicker.disabled=true;
   if(referenceUrl){setButtonBusy(button,'GRADING…');playWithWave(referenceUrl);gradeReference(referenceBlob,lesson,engine,voice);return}
   setButtonBusy(button,'GENERATING…');
@@ -276,9 +283,9 @@ function playReference(){
     if(data.status==='progress'){statusEl.textContent=data.message;return}
     if(data.status==='complete'){
       referenceBlob=data.audio;referenceUrl=URL.createObjectURL(data.audio);playWithWave(referenceUrl);
-      statusEl.textContent='Reference pronunciation ready. Grading the AI voice…';button.querySelector('span').textContent='GRADING…';cleanup();
+      statusEl.textContent='Reference pronunciation ready. Grading the AI voice…';button.querySelector('span').textContent='GRADING…';renderGradeBusy('#aiGrade');cleanup();
       gradeReference(data.audio,lesson,engine,voice);
-    }else if(data.status==='error'){document.querySelector('#aiGrade').innerHTML='<b>—</b><small>TRY AGAIN</small>';statusEl.textContent=`Reference voice failed: ${data.error}`;cleanup();enginePicker.disabled=false;voicePicker.disabled=false;resetButton(button,'GRADE AI')}
+    }else if(data.status==='error'){renderGradeEmpty('#aiGrade','TRY AGAIN');statusEl.textContent=`Reference voice failed: ${data.error}`;cleanup();enginePicker.disabled=false;voicePicker.disabled=false;resetButton(button,'GRADE AI')}
   };
   const cleanup=()=>worker.removeEventListener('message',onMessage);
   worker.addEventListener('message',onMessage);
@@ -304,15 +311,15 @@ async function recognize(blob){
 async function gradeReference(blob,lesson,engine,voice){
   try{
     document.querySelector('#wave').classList.add('grading');
+    renderGradeBusy('#aiGrade');
     const result=await recognize(blob);
     if(currentLesson!==lesson)return;
     const score=scoreTokens(lesson.tokens,result.decoded.tokens);
     renderSentence(scoreWords(lesson.ipa,align(lesson.tokens,result.decoded.tokens)));
     document.querySelector('#textLegend').classList.remove('hidden');
-    const badge=document.querySelector('#aiGrade');
-    badge.innerHTML=`<b>${score}%</b><small>${engine==='kokoro'?'KOKORO':'POCKET'} · ${voice.toUpperCase()} · ${Math.round(result.inferenceMs)} ms</small>`;
+    renderGrade('#aiGrade',score,`${engine==='kokoro'?'KOKORO':'POCKET'} · ${voice.toUpperCase()} · ${Math.round(result.inferenceMs)} ms`);
     statusEl.textContent=`AI reference graded ${score}% by the same phoneme model.`;
-  }catch(e){console.error(e);document.querySelector('#aiGrade').innerHTML='<b>—</b><small>TRY AGAIN</small>';statusEl.textContent=`AI grading failed: ${e.message}`}
+  }catch(e){console.error(e);renderGradeEmpty('#aiGrade','TRY AGAIN');statusEl.textContent=`AI grading failed: ${e.message}`}
   finally{document.querySelector('#wave').classList.remove('grading');enginePicker.disabled=false;voicePicker.disabled=false;resetButton(document.querySelector('#playReference'),'GRADE AI')}
 }
 
@@ -323,7 +330,7 @@ async function analyze(blob){
     statusEl.innerHTML='<span class="spinner"></span> Recognizing and aligning phonemes…';
     const result=await recognize(blob);
     renderResults(result.decoded,result.inferenceMs,result.duration);
-  } catch(e){ console.error(e); document.querySelector('#userGrade').innerHTML='<b>—</b><small>TRY AGAIN</small>';statusEl.textContent=`Analysis failed: ${e.message}`; }
+  } catch(e){ console.error(e); renderGradeEmpty('#userGrade','TRY AGAIN');statusEl.textContent=`Analysis failed: ${e.message}`; }
   finally{document.querySelector('#wave').classList.remove('grading');resetButton(recordBtn,'MY TURN')}
 }
 
@@ -339,7 +346,7 @@ function renderResults(decoded, ms, duration){
   const score=scoreTokens(currentLesson.tokens,observed);
   renderSentence(scoreWords(currentLesson.ipa,aligned));
   document.querySelector('#textLegend').classList.remove('hidden');
-  document.querySelector('#userGrade').innerHTML=`<b>${score}%</b><small>YOU · ${Math.round(ms)} ms</small>`;
+  renderGrade('#userGrade',score,`YOU · ${Math.round(ms)} ms`);
   statusEl.textContent='Your turn graded. Your recording stayed on this device.';
 }
 
