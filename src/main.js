@@ -109,7 +109,14 @@ document.querySelector('#previousLesson').addEventListener('click',()=>moveThrou
 document.querySelector('#nextLesson').addEventListener('click',()=>moveThroughCurriculum(1));
 document.querySelectorAll('.progress-dot').forEach(dot=>dot.addEventListener('click',()=>selectLesson(CURRICULUM[Number(dot.dataset.curriculum)],{updateUrl:true})));
 document.addEventListener('click',event=>{if(!event.target.closest('#customChallenge')){sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false')}});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'){sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false')}});
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false');return}
+  if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+  if(event.target.closest('input, select, textarea, [contenteditable="true"]')||recorder?.state==='recording')return;
+  if(CURRICULUM.indexOf(currentLesson)<0)return;
+  event.preventDefault();
+  moveThroughCurriculum(event.key==='ArrowLeft'?-1:1);
+});
 
 document.querySelector('#customChallenge').addEventListener('submit',event=>{
   event.preventDefault();const text=document.querySelector('#customText').value.trim();if(!text)return;
