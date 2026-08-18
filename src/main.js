@@ -45,6 +45,7 @@ const ADVANCED_LESSONS=new Set(['consonant-clusters','schwa','linking','reductio
 const difficultyFor=lesson=>BEGINNER_LESSONS.has(lesson.id)?'Beginner':ADVANCED_LESSONS.has(lesson.id)?'Advanced':'Intermediate';
 const DIFFICULTY_ORDER={Beginner:0,Intermediate:1,Advanced:2};
 const SAMPLE_MENU_LESSONS=LESSONS.map((lesson,index)=>({lesson,index})).sort((a,b)=>DIFFICULTY_ORDER[difficultyFor(a.lesson)]-DIFFICULTY_ORDER[difficultyFor(b.lesson)]);
+const CURRICULUM=SAMPLE_MENU_LESSONS.map(({lesson})=>lesson);
 const initialChallenge=new URL(location.href).searchParams.get('challenge');
 const presetChallenge=LESSONS.find(lesson=>lesson.id===initialChallenge);
 let currentLesson = presetChallenge||LESSONS[0];
@@ -59,7 +60,8 @@ app.innerHTML = `
       <form id="customChallenge" class="custom-challenge"><button type="button" id="sampleToggle" class="sample-toggle" aria-label="Show sample sentences" aria-expanded="false"><i></i></button><input id="customText" maxlength="180" value="${currentLesson.sentence}" placeholder="Choose a sample or write your own sentence…" aria-label="Choose or write a challenge sentence" autocomplete="off"><button class="challenge-submit">CHALLENGE</button><div id="sampleMenu" class="sample-menu hidden">${SAMPLE_MENU_LESSONS.map(({lesson,index})=>`<button type="button" class="sample-option" data-lesson="${index}"><span>${lesson.label}</span><b>${lesson.sentence}</b><small>${lesson.focus}</small><em class="level-${difficultyFor(lesson).toLowerCase()}">${difficultyFor(lesson)}</em></button>`).join('')}</div></form>
     </section>
     <section class="practice-card">
-      <div class="sentence-row"><blockquote id="sentence">“${currentLesson.sentence}”</blockquote></div>
+      <div id="lessonMeta" class="lesson-meta"><span id="lessonDifficulty" class="level-${difficultyFor(currentLesson).toLowerCase()}">${difficultyFor(currentLesson)}</span><span id="lessonPosition"></span></div>
+      <div class="sentence-row"><button id="previousLesson" class="lesson-arrow" aria-label="Previous sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5-7 7 7 7"/></svg></button><blockquote id="sentence">“${currentLesson.sentence}”</blockquote><button id="nextLesson" class="lesson-arrow" aria-label="Next sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5 7 7-7 7"/></svg></button></div>
       <div id="textLegend" class="text-legend hidden"><span><i class="legend-good"></i>Clear</span><span><i class="legend-close"></i>Close</span><span><i class="legend-practice"></i>Practice</span></div>
       <div class="game-controls">
         <div class="game-player">
@@ -77,6 +79,7 @@ app.innerHTML = `
       </div>
       <p class="hint" id="status">Press record, then read the line above.</p>
     </section>
+    <div id="lessonProgress" class="lesson-progress" aria-label="Guided drill progress">${CURRICULUM.map((lesson,index)=>`<button class="progress-dot" data-curriculum="${index}" aria-label="Go to ${difficultyFor(lesson).toLowerCase()} drill ${index+1}: ${lesson.label}"></button>`).join('')}</div>
   </main>`;
 
 let recorder, chunks = [], audioCtx, analyser, raf, referenceUrl, referenceBlob;
@@ -102,6 +105,9 @@ document.querySelectorAll('.sample-option').forEach(option=>option.addEventListe
   sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false');
   selectLesson(LESSONS[Number(option.dataset.lesson)],{updateUrl:true});
 }));
+document.querySelector('#previousLesson').addEventListener('click',()=>moveThroughCurriculum(-1));
+document.querySelector('#nextLesson').addEventListener('click',()=>moveThroughCurriculum(1));
+document.querySelectorAll('.progress-dot').forEach(dot=>dot.addEventListener('click',()=>selectLesson(CURRICULUM[Number(dot.dataset.curriculum)],{updateUrl:true})));
 document.addEventListener('click',event=>{if(!event.target.closest('#customChallenge')){sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false')}});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'){sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false')}});
 
@@ -127,7 +133,36 @@ function selectLesson(lesson,{updateUrl}){
   document.querySelector('#userGrade').innerHTML='<b>—</b><small>YOUR SCORE</small>';
   document.querySelector('#textLegend').classList.add('hidden');
   renderSentence();
+  updateLessonNavigation();
   statusEl.textContent = 'Press record, then read the line above.';
+}
+
+function moveThroughCurriculum(direction){
+  const index=CURRICULUM.indexOf(currentLesson);
+  const nextIndex=index+direction;
+  if(nextIndex>=0&&nextIndex<CURRICULUM.length)selectLesson(CURRICULUM[nextIndex],{updateUrl:true});
+}
+
+function updateLessonNavigation(){
+  const index=CURRICULUM.indexOf(currentLesson);
+  const isGuided=index>=0;
+  document.querySelector('#lessonMeta').classList.toggle('hidden',!isGuided);
+  document.querySelector('#previousLesson').classList.toggle('hidden',!isGuided);
+  document.querySelector('#nextLesson').classList.toggle('hidden',!isGuided);
+  document.querySelector('#lessonProgress').classList.toggle('hidden',!isGuided);
+  if(!isGuided)return;
+  const level=difficultyFor(currentLesson);
+  const difficulty=document.querySelector('#lessonDifficulty');
+  difficulty.textContent=level;
+  difficulty.className=`level-${level.toLowerCase()}`;
+  document.querySelector('#lessonPosition').textContent=`${index+1} of ${CURRICULUM.length}`;
+  document.querySelector('#previousLesson').disabled=index===0;
+  document.querySelector('#nextLesson').disabled=index===CURRICULUM.length-1;
+  document.querySelectorAll('.progress-dot').forEach((dot,dotIndex)=>{
+    const current=dotIndex===index;
+    dot.classList.toggle('current',current);
+    current?dot.setAttribute('aria-current','step'):dot.removeAttribute('aria-current');
+  });
 }
 
 window.addEventListener('popstate',()=>location.reload());
@@ -143,6 +178,7 @@ async function setCustomChallenge(text,{updateUrl}){
     currentLesson={id:'custom',label:'Custom challenge',focus:'Your sentence',sentence:text,ipa,tokens,tip:'Aim for clear sounds, natural rhythm, and complete word endings.'};
     document.querySelectorAll('.lesson-tab').forEach(tab=>tab.classList.remove('selected'));
     renderSentence();
+    updateLessonNavigation();
     if(referenceUrl)URL.revokeObjectURL(referenceUrl);referenceUrl=null;referenceBlob=null;
     document.querySelector('#aiGrade').innerHTML='<b>—</b><small>AI VOICE</small>';document.querySelector('#userGrade').innerHTML='<b>—</b><small>YOUR SCORE</small>';document.querySelector('#textLegend').classList.add('hidden');
     if(updateUrl){const url=new URL(location.href);url.searchParams.set('challenge',text);history.pushState({challenge:text},'',url)}
@@ -150,6 +186,8 @@ async function setCustomChallenge(text,{updateUrl}){
   }catch(error){statusEl.textContent=`Could not phonemize this challenge: ${error.message}`}
   finally{input.disabled=false;submit.disabled=false;submit.textContent='CHALLENGE'}
 }
+
+updateLessonNavigation();
 
 function phonemizeText(text){
   phonemizeWorker ||= new Worker(new URL('./phonemize-worker.js',import.meta.url),{type:'module'});
