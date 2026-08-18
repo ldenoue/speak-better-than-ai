@@ -44,8 +44,7 @@ const BEGINNER_LESSONS=new Set(['quick-brown-fox','w-and-v','long-short-i','word
 const ADVANCED_LESSONS=new Set(['consonant-clusters','schwa','linking','reductions','flap-t','r-vowels','sentence-stress','thirty-three','peter-piper','fresh-fried-fish']);
 const difficultyFor=lesson=>BEGINNER_LESSONS.has(lesson.id)?'Beginner':ADVANCED_LESSONS.has(lesson.id)?'Advanced':'Intermediate';
 const DIFFICULTY_ORDER={Beginner:0,Intermediate:1,Advanced:2};
-const SAMPLE_MENU_LESSONS=LESSONS.map((lesson,index)=>({lesson,index})).sort((a,b)=>DIFFICULTY_ORDER[difficultyFor(a.lesson)]-DIFFICULTY_ORDER[difficultyFor(b.lesson)]);
-const CURRICULUM=SAMPLE_MENU_LESSONS.map(({lesson})=>lesson);
+const CURRICULUM=[...LESSONS].sort((a,b)=>DIFFICULTY_ORDER[difficultyFor(a)]-DIFFICULTY_ORDER[difficultyFor(b)]);
 const initialChallenge=new URL(location.href).searchParams.get('challenge');
 const presetChallenge=LESSONS.find(lesson=>lesson.id===initialChallenge);
 let currentLesson = presetChallenge||LESSONS[0];
@@ -56,8 +55,8 @@ app.innerHTML = `
   <main>
     <nav><h1 class="app-title">Speak Better Than AI?</h1><p class="app-subtitle">100% local AI, in your browser only.</p><a class="github-link github-header" href="https://github.com/ldenoue/speak-better-than-ai" target="_blank" rel="noopener noreferrer" aria-label="View Speak Better Than AI on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.52-1.34-1.28-1.7-1.28-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.47.11-3.05 0 0 .97-.31 3.16 1.18a10.9 10.9 0 0 1 5.76 0c2.19-1.49 3.15-1.18 3.15-1.18.63 1.58.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.71 5.39-5.29 5.68.42.36.79 1.06.79 2.14v3.18c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z"/></svg></a></nav>
     <section class="lesson-picker">
-      <div class="picker-head"><p class="eyebrow">CHOOSE OR WRITE A CHALLENGE</p><span>${LESSONS.length} guided drills</span></div>
-      <form id="customChallenge" class="custom-challenge"><button type="button" id="sampleToggle" class="sample-toggle" aria-label="Show sample sentences" aria-expanded="false"><i></i></button><input id="customText" maxlength="180" value="${currentLesson.sentence}" placeholder="Choose a sample or write your own sentence…" aria-label="Choose or write a challenge sentence" autocomplete="off"><button class="challenge-submit">CHALLENGE</button><div id="sampleMenu" class="sample-menu hidden">${SAMPLE_MENU_LESSONS.map(({lesson,index})=>`<button type="button" class="sample-option" data-lesson="${index}"><span>${lesson.label}</span><b>${lesson.sentence}</b><small>${lesson.focus}</small><em class="level-${difficultyFor(lesson).toLowerCase()}">${difficultyFor(lesson)}</em></button>`).join('')}</div></form>
+      <div class="picker-head"><p class="eyebrow">WRITE YOUR OWN CHALLENGE</p><span>${LESSONS.length} guided drills</span></div>
+      <form id="customChallenge" class="custom-challenge"><input id="customText" maxlength="180" value="${currentLesson.sentence}" placeholder="Write your own sentence…" aria-label="Write a custom challenge sentence" autocomplete="off"><button class="challenge-submit">TRY</button></form>
     </section>
     <section class="practice-card">
       <div id="lessonMeta" class="lesson-meta"><span id="lessonDifficulty" class="level-${difficultyFor(currentLesson).toLowerCase()}">${difficultyFor(currentLesson)}</span><span id="lessonPosition"></span></div>
@@ -95,22 +94,10 @@ function clearReference(){if(referenceUrl)URL.revokeObjectURL(referenceUrl);refe
 renderVoicePicker();
 enginePicker.addEventListener('change',event=>{selectedEngine=event.target.value;renderVoicePicker();clearReference();statusEl.textContent=`${event.target.selectedOptions[0].text} ready.`});
 voicePicker.addEventListener('change',event=>{selectedVoice=event.target.value;clearReference();statusEl.textContent='AI voice changed. Ready to grade.'});
-const sampleToggle=document.querySelector('#sampleToggle');
-const sampleMenu=document.querySelector('#sampleMenu');
-sampleToggle.addEventListener('click',()=>{
-  const open=sampleMenu.classList.toggle('hidden');
-  sampleToggle.setAttribute('aria-expanded',String(!open));
-});
-document.querySelectorAll('.sample-option').forEach(option=>option.addEventListener('click',()=>{
-  sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false');
-  selectLesson(LESSONS[Number(option.dataset.lesson)],{updateUrl:true});
-}));
 document.querySelector('#previousLesson').addEventListener('click',()=>moveThroughCurriculum(-1));
 document.querySelector('#nextLesson').addEventListener('click',()=>moveThroughCurriculum(1));
 document.querySelectorAll('.progress-dot').forEach(dot=>dot.addEventListener('click',()=>selectLesson(CURRICULUM[Number(dot.dataset.curriculum)],{updateUrl:true})));
-document.addEventListener('click',event=>{if(!event.target.closest('#customChallenge')){sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false')}});
 document.addEventListener('keydown',event=>{
-  if(event.key==='Escape'){sampleMenu.classList.add('hidden');sampleToggle.setAttribute('aria-expanded','false');return}
   if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
   if(event.target.closest('input, select, textarea, [contenteditable="true"]')||recorder?.state==='recording')return;
   if(CURRICULUM.indexOf(currentLesson)<0)return;
@@ -191,7 +178,7 @@ async function setCustomChallenge(text,{updateUrl}){
     if(updateUrl){const url=new URL(location.href);url.searchParams.set('challenge',text);history.pushState({challenge:text},'',url)}
     statusEl.textContent='Custom challenge ready.';
   }catch(error){statusEl.textContent=`Could not phonemize this challenge: ${error.message}`}
-  finally{input.disabled=false;submit.disabled=false;submit.textContent='CHALLENGE'}
+  finally{input.disabled=false;submit.disabled=false;submit.textContent='TRY'}
 }
 
 updateLessonNavigation();
