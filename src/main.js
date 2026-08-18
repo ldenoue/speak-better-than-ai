@@ -66,7 +66,7 @@ app.innerHTML = `
       <div class="game-controls">
         <div class="game-player">
           <div id="aiGrade" class="game-score"><div class="score-ring empty"><b>—</b></div><small>AI VOICE</small></div>
-          <div class="ai-tts-controls"><div class="tts-pickers"><select id="enginePicker" aria-label="AI speech engine"><option value="pocket">PocketTTS</option><option value="kokoro">Kokoro</option></select><select id="voicePicker" aria-label="AI voice"></select></div><button id="playReference" class="game-button ai-button" aria-label="Generate and grade AI pronunciation"><i></i><span>GRADE AI</span></button></div>
+          <button id="playReference" class="game-button ai-button" aria-label="Generate and grade AI pronunciation"><i></i><span>GRADE AI</span></button>
         </div>
         <div class="versus"><span>VS</span></div>
         <div class="game-player">
@@ -80,6 +80,7 @@ app.innerHTML = `
       <p class="hint" id="status">Press record, then read the line above.</p>
     </section>
     <div id="lessonProgress" class="lesson-progress" aria-label="Challenge progress"></div>
+    <div class="tts-settings"><span>AI VOICE</span><select id="enginePicker" aria-label="AI speech engine"><option value="pocket">PocketTTS</option><option value="kokoro">Kokoro</option></select><select id="voicePicker" aria-label="AI voice"></select></div>
   </main>`;
 
 let recorder, chunks = [], audioCtx, analyser, raf, referenceUrl, referenceBlob;
