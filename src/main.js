@@ -66,7 +66,7 @@ app.innerHTML = `
       <div class="game-controls">
         <div class="game-player">
           <div id="aiGrade" class="game-score"><div class="score-ring empty"><b>—</b></div><small>AI VOICE</small></div>
-          <button id="playReference" class="game-button ai-button" aria-label="Generate and grade AI pronunciation"><i></i><span>GRADE AI</span></button>
+          <button id="playReference" class="game-button ai-button" aria-label="Generate and grade AI pronunciation"><i></i><span>AI Azelma</span></button>
         </div>
         <div class="versus"><span>VS</span></div>
         <div class="game-player">
@@ -91,11 +91,12 @@ const statusEl = document.querySelector('#status');
 
 document.querySelector('#playReference').addEventListener('click', playReference);
 const enginePicker=document.querySelector('#enginePicker'),voicePicker=document.querySelector('#voicePicker');
-function renderVoicePicker(){voicePicker.innerHTML=TTS_VOICES[selectedEngine].map(voice=>`<option value="${voice.id}">${voice.name}</option>`).join('');selectedVoice=TTS_VOICES[selectedEngine][0].id}
+function aiVoiceLabel(){const voice=TTS_VOICES[selectedEngine].find(item=>item.id===selectedVoice);return `AI ${voice?.name.split(' · ')[0]||'voice'}`}
+function renderVoicePicker(){voicePicker.innerHTML=TTS_VOICES[selectedEngine].map(voice=>`<option value="${voice.id}">${voice.name}</option>`).join('');selectedVoice=TTS_VOICES[selectedEngine][0].id;document.querySelector('#playReference span').textContent=aiVoiceLabel()}
 function clearReference(){if(referenceUrl)URL.revokeObjectURL(referenceUrl);referenceUrl=null;referenceBlob=null;renderGradeEmpty('#aiGrade','AI VOICE');renderSentence();document.querySelector('#textLegend').classList.add('hidden')}
 renderVoicePicker();
 enginePicker.addEventListener('change',event=>{selectedEngine=event.target.value;renderVoicePicker();clearReference();statusEl.textContent=`${event.target.selectedOptions[0].text} ready.`});
-voicePicker.addEventListener('change',event=>{selectedVoice=event.target.value;clearReference();statusEl.textContent='AI voice changed. Ready to grade.'});
+voicePicker.addEventListener('change',event=>{selectedVoice=event.target.value;document.querySelector('#playReference span').textContent=aiVoiceLabel();clearReference();statusEl.textContent='AI voice changed. Ready to grade.'});
 document.querySelector('#previousLesson').addEventListener('click',()=>moveThroughCurriculum(-1));
 document.querySelector('#nextLesson').addEventListener('click',()=>moveThroughCurriculum(1));
 document.querySelector('#lessonProgress').addEventListener('click',event=>{const dot=event.target.closest('.progress-dot');if(dot)selectLesson(lessonSequence()[Number(dot.dataset.lesson)],{updateUrl:true})});
@@ -278,7 +279,7 @@ function playReference(){
       referenceBlob=data.audio;referenceUrl=URL.createObjectURL(data.audio);playWithWave(referenceUrl);
       statusEl.textContent='Reference pronunciation ready. Grading the AI voice…';button.querySelector('span').textContent='GRADING…';renderGradeBusy('#aiGrade');cleanup();
       gradeReference(data.audio,lesson,engine,voice);
-    }else if(data.status==='error'){renderGradeEmpty('#aiGrade','TRY AGAIN');statusEl.textContent=`Reference voice failed: ${data.error}`;cleanup();enginePicker.disabled=false;voicePicker.disabled=false;resetButton(button,'GRADE AI')}
+    }else if(data.status==='error'){renderGradeEmpty('#aiGrade','TRY AGAIN');statusEl.textContent=`Reference voice failed: ${data.error}`;cleanup();enginePicker.disabled=false;voicePicker.disabled=false;resetButton(button,aiVoiceLabel())}
   };
   const cleanup=()=>worker.removeEventListener('message',onMessage);
   worker.addEventListener('message',onMessage);
@@ -313,7 +314,7 @@ async function gradeReference(blob,lesson,engine,voice){
     renderGrade('#aiGrade',score,`${engine==='kokoro'?'KOKORO':'POCKET'} · ${voice.toUpperCase()} · ${Math.round(result.inferenceMs)} ms`);
     statusEl.textContent=`AI reference graded ${score}% by the same phoneme model.`;
   }catch(e){console.error(e);renderGradeEmpty('#aiGrade','TRY AGAIN');statusEl.textContent=`AI grading failed: ${e.message}`}
-  finally{document.querySelector('#wave').classList.remove('grading');enginePicker.disabled=false;voicePicker.disabled=false;resetButton(document.querySelector('#playReference'),'GRADE AI')}
+  finally{document.querySelector('#wave').classList.remove('grading');enginePicker.disabled=false;voicePicker.disabled=false;resetButton(document.querySelector('#playReference'),aiVoiceLabel())}
 }
 
 async function analyze(blob){
