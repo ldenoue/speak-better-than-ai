@@ -65,6 +65,7 @@ Vite uses relative asset paths, so the same build can also run on a custom domai
 - [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/)
 - [PocketTTS](https://github.com/kyutai-labs/pocket-tts)
 - [Kokoro](https://github.com/hexgrad/kokoro)
+- [Supertonic 3](https://github.com/supertone-inc/supertonic)
 - [eSpeak NG](https://github.com/espeak-ng/espeak-ng)
 - [Wav2Vec2 phoneme model](https://huggingface.co/onnx-community/wav2vec2-lv-60-espeak-cv-ft-ONNX)
 

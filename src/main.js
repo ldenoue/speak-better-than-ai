@@ -33,6 +33,10 @@ const LESSONS = [
 ];
 const TTS_VOICES={
   pocket:[{id:'azelma',name:'Azelma'}],
+  supertonic:[
+    {id:'M1',name:'Alex · male'},{id:'M2',name:'James · male'},{id:'M3',name:'Robert · male'},{id:'M4',name:'Sam · male'},{id:'M5',name:'Daniel · male'},
+    {id:'F1',name:'Sarah · female'},{id:'F2',name:'Lily · female'},{id:'F3',name:'Jessica · female'},{id:'F4',name:'Olivia · female'},{id:'F5',name:'Emily · female'}
+  ],
   kokoro:[
     {id:'af_heart',name:'Heart · US female'},{id:'af_bella',name:'Bella · US female'},{id:'af_nicole',name:'Nicole · US female'},{id:'af_sarah',name:'Sarah · US female'},{id:'af_sky',name:'Sky · US female'},{id:'af_alloy',name:'Alloy · US female'},{id:'af_aoede',name:'Aoede · US female'},{id:'af_jessica',name:'Jessica · US female'},{id:'af_kore',name:'Kore · US female'},{id:'af_nova',name:'Nova · US female'},{id:'af_river',name:'River · US female'},
     {id:'am_adam',name:'Adam · US male'},{id:'am_echo',name:'Echo · US male'},{id:'am_eric',name:'Eric · US male'},{id:'am_fenrir',name:'Fenrir · US male'},{id:'am_liam',name:'Liam · US male'},{id:'am_michael',name:'Michael · US male'},{id:'am_onyx',name:'Onyx · US male'},{id:'am_puck',name:'Puck · US male'},{id:'am_santa',name:'Santa · US male'},
@@ -82,11 +86,11 @@ app.innerHTML = `
       <p class="hint" id="status">Press record, then read the line above.</p>
     </section>
     <div id="lessonProgress" class="lesson-progress" aria-label="Challenge progress"></div>
-    <div class="tts-settings"><span>AI VOICE</span><select id="enginePicker" aria-label="AI speech engine"><option value="pocket">PocketTTS</option><option value="kokoro">Kokoro</option></select><select id="voicePicker" aria-label="AI voice"></select></div>
+    <div class="tts-settings"><span>AI VOICE</span><select id="enginePicker" aria-label="AI speech engine"><option value="pocket">PocketTTS</option><option value="supertonic">Supertonic v3</option><option value="kokoro">Kokoro</option></select><select id="voicePicker" aria-label="AI voice"></select></div>
   </main>`;
 
 let recorder, chunks = [], audioCtx, analyser, raf, referenceUrl, referenceBlob;
-let ttsWorker, kokoroWorker, phonemeWorker, phonemizeWorker;
+let ttsWorker, kokoroWorker, supertonicWorker, phonemeWorker, phonemizeWorker;
 const recognitionJobs=new Map();
 const recordBtn = document.querySelector('#record');
 const statusEl = document.querySelector('#status');
@@ -278,10 +282,13 @@ function playReference(){
   enginePicker.disabled=true;voicePicker.disabled=true;
   if(referenceUrl){setButtonBusy(button,'GRADING…');playWithWave(referenceUrl);gradeReference(referenceBlob,lesson,engine,voice);return}
   setButtonBusy(button,'GENERATING…');
-  statusEl.innerHTML=`<span class="spinner"></span> Loading ${engine==='kokoro'?'Kokoro':'PocketTTS'}…`;
+  const engineName=engine==='kokoro'?'Kokoro':engine==='supertonic'?'Supertonic v3':'PocketTTS';
+  statusEl.innerHTML=`<span class="spinner"></span> Loading ${engineName}…`;
   const worker=engine==='kokoro'
     ?(kokoroWorker ||= new Worker(new URL('./kokoro-worker.js',import.meta.url),{type:'module'}))
-    :(ttsWorker ||= new Worker(new URL(`${import.meta.env.BASE_URL}pocket-tts-worker.js`,location.href),{type:'module'}));
+    :engine==='supertonic'
+      ?(supertonicWorker ||= new Worker(new URL('./supertonic-worker.js',import.meta.url),{type:'module'}))
+      :(ttsWorker ||= new Worker(new URL(`${import.meta.env.BASE_URL}pocket-tts-worker.js`,location.href),{type:'module'}));
   const requestId=crypto.randomUUID();
   const onMessage=event=>{
     const data=event.data||{};
@@ -295,7 +302,7 @@ function playReference(){
   };
   const cleanup=()=>worker.removeEventListener('message',onMessage);
   worker.addEventListener('message',onMessage);
-  worker.postMessage(engine==='kokoro'?{command:'tts',text:lesson.sentence,voice,requestId}:{command:'tts',text:lesson.sentence,voice,quant:'q8',stream:false,reason:'preview',requestId});
+  worker.postMessage(engine==='pocket'?{command:'tts',text:lesson.sentence,voice,quant:'q8',stream:false,reason:'preview',requestId}:{command:'tts',text:lesson.sentence,voice,requestId});
 }
 
 async function recognize(blob){
@@ -323,7 +330,7 @@ async function gradeReference(blob,lesson,engine,voice){
     const score=scoreTokens(lesson.tokens,result.decoded.tokens);
     renderSentence(scoreWords(lesson.ipa,align(lesson.tokens,result.decoded.tokens)));
     document.querySelector('#textLegend').classList.remove('hidden');
-    renderGrade('#aiGrade',score,`${engine==='kokoro'?'KOKORO':'POCKET'} · ${voice.toUpperCase()} · ${Math.round(result.inferenceMs)} ms`);
+    renderGrade('#aiGrade',score,`${engine==='kokoro'?'KOKORO':engine==='supertonic'?'SUPERTONIC 3':'POCKET'} · ${voice.toUpperCase()} · ${Math.round(result.inferenceMs)} ms`);
     updateShareUrl({engine,voice,ai:score});
     statusEl.textContent=`AI reference graded ${score}% by the same phoneme model.`;
   }catch(e){console.error(e);renderGradeEmpty('#aiGrade','TRY AGAIN');statusEl.textContent=`AI grading failed: ${e.message}`}
